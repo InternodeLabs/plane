@@ -7,7 +7,7 @@ services:
     volumes:
       - redisdata:/data
     ports:
-      - ${REDIS_PORT:-6379}:6379
+      - ${REDIS_HOST_PORT:-6379}:6379
 
   plane-mq:
     image: rabbitmq:3.13.6-management-alpine
@@ -45,8 +45,8 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     ports:
-      - "9000:9000"
-      - ${MINIO_PORT:-9090}:9090
+      - ${MINIO_PORT_2:-9003}:9000
+      - ${MINIO_PORT_1:-9090}:9090
 
   plane-db:
     image: postgres:15.7-alpine
@@ -61,7 +61,7 @@ services:
     environment:
       PGDATA: /var/lib/postgresql/data
     ports:
-      - ${POSTGRES_PORT:-5432}:5432
+      - ${POSTGRES_HOST_PORT:-5432}:5432
 
   # web:
   #   build:

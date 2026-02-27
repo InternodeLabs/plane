@@ -67,7 +67,7 @@
     },
     "dev": {
       "cache": false,
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build"],
       "persistent": true
     },
     "fix": {
