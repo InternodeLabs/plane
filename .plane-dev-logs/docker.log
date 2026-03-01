@@ -1,0 +1,10 @@
+time="2026-02-28T20:04:22-08:00" level=warning msg="No services to build"
+ Container plane-plane-redis-1 Running 
+ Container plane-plane-mq-1 Running 
+ Container plane-plane-minio-1 Running 
+ Container plane-plane-db-1 Running 
+ Container plane-api-1 Running 
+ Container plane-beat-worker-1 Running 
+ Container plane-worker-1 Running 
+ Container plane-migrator-1 Starting 
+ Container plane-migrator-1 Started 

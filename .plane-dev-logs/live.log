@@ -1,0 +1,28 @@
+
+> live@1.2.0 dev /Users/sshadmand/repos/plane/apps/live
+> tsdown --watch --onSuccess "node --env-file=.env ."
+
+[34mℹ[39m tsdown [2mv0.16.0[22m powered by rolldown [2mv1.0.0-beta.46[22m
+[34mℹ[39m Using tsdown config: [4m/Users/sshadmand/repos/plane/apps/live/tsdown.config.ts[24m
+[34mℹ[39m entry: [34msrc/start.ts[39m
+[34mℹ[39m tsconfig: [34mtsconfig.json[39m
+[34mℹ[39m Build start
+[34mℹ[39m Cleaning 1 files
+[34mℹ[39m [2mdist/[22m[1mstart.mjs[22m  [2m100.97 kB[22m [2m│ gzip: 24.49 kB[22m
+[34mℹ[39m 1 files, total: 100.97 kB
+[32m✔[39m Build complete in [32m54ms[39m
+[34mℹ[39m Watching for changes in /Users/sshadmand/repos/plane/apps/live
+[38;5;142m[dotenvx@1.51.1] injecting env (0) from .env[39m
+{"level":"info","message":"REDIS_MANAGER: Redis client connected","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"REDIS_MANAGER: Redis client ready","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"REDIS_MANAGER: Redis connection test successful","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"SERVER: Redis setup completed","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"SERVER: HocusPocus setup completed","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"SERVER: Express server has started at port 3110","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"[Redis] Subscribed to admin channel: hocuspocus:admin","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"[Redis] Attached admin message listener","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"[Redis] Registered admin command: force_close","timestamp":"2026-02-28 19:42:37:4237"}
+{"level":"info","message":"[FORCE_CLOSE_HANDLER] Registered with Redis extension","timestamp":"2026-02-28 19:42:37:4237"}
+/Users/sshadmand/repos/plane/apps/live:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  live@1.2.0 dev: `tsdown --watch --onSuccess "node --env-file=.env ."`
+Command failed with signal "SIGTERM"
