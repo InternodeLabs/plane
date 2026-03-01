@@ -111,7 +111,7 @@ build/
 .react-router/
 AGENTS.md
 temp/
-scripts/
+# scripts/
 
 
 *.log
