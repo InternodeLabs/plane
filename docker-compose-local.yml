@@ -7,7 +7,7 @@ services:
     volumes:
       - redisdata:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_HOST_PORT:-6379}:6379"
 
   plane-mq:
     image: rabbitmq:3.13.6-management-alpine
@@ -33,7 +33,7 @@ services:
       mkdir -p /export/${AWS_S3_BUCKET_NAME} &&
       minio server /export --console-address ':9090' &
       sleep 5 &&
-      mc alias set myminio http://localhost:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} &&
+      mc alias set myminio http://plane-minio:9000 ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} &&
       mc mb myminio/${AWS_S3_BUCKET_NAME} -p || true
       && tail -f /dev/null
       "
@@ -45,8 +45,8 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     ports:
-      - "9000:9000"
-      - "9090:9090"
+      - "${MINIO_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9090}:9090"
 
   plane-db:
     image: postgres:15.7-alpine
@@ -61,7 +61,7 @@ services:
     environment:
       PGDATA: /var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
 
   # web:
   #   build:
@@ -139,7 +139,7 @@ services:
       - plane-redis
       - plane-mq
     ports:
-      - "8000:8000"
+      - "${API_HOST_PORT:-8000}:8000"
 
   worker:
     build:

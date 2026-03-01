@@ -112,3 +112,6 @@ build/
 AGENTS.md
 temp/
 scripts/
+
+
+*.log
