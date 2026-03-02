@@ -5,11 +5,16 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT_DIR/.plane-dev-pids"
 LOG_DIR="$ROOT_DIR/.plane-dev-logs"
 
-mkdir -p "$LOG_DIR"
-
-if ! : > "$PID_FILE"; then
-  echo "Unable to write PID file at $PID_FILE. Check permissions/ownership of $ROOT_DIR." >&2
-  exit 1
+if ! mkdir -p "$LOG_DIR" >/dev/null 2>&1 || ! : > "$PID_FILE" 2>/dev/null; then
+  STATE_DIR="${PLANE_DEV_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/plane-dev}"
+  LOG_DIR="$STATE_DIR/logs"
+  PID_FILE="$STATE_DIR/pids"
+  mkdir -p "$LOG_DIR"
+  if ! : > "$PID_FILE"; then
+    echo "Unable to write PID file. Tried $ROOT_DIR and $STATE_DIR." >&2
+    exit 1
+  fi
+  echo "Using state dir: $STATE_DIR"
 fi
 
 required_ports=(3001 3002 3003)

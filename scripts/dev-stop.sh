@@ -5,6 +5,15 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT_DIR/.plane-dev-pids"
 
 if [[ ! -f "$PID_FILE" ]]; then
+  STATE_DIR="${PLANE_DEV_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/plane-dev}"
+  ALT_PID_FILE="$STATE_DIR/pids"
+  if [[ -f "$ALT_PID_FILE" ]]; then
+    PID_FILE="$ALT_PID_FILE"
+    echo "Using PID file from state dir: $PID_FILE"
+  fi
+fi
+
+if [[ ! -f "$PID_FILE" ]]; then
   echo "No PID file found at $PID_FILE. Nothing to stop." >&2
   exit 0
 fi
