@@ -15,6 +15,15 @@ const viteEnv = Object.keys(process.env)
     return a;
   }, {});
 
+const allowedHostsEnv = (process.env.VITE_ALLOWED_HOSTS ?? "god.internode.us,pm.internode.us").trim();
+const allowedHosts: true | string[] =
+  allowedHostsEnv === "*"
+    ? (true as const)
+    : allowedHostsEnv
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean);
+
 const basePath = joinUrlPath(process.env.VITE_ADMIN_BASE_PATH ?? "", "/") ?? "/";
 
 export default defineConfig(() => ({
@@ -36,6 +45,7 @@ export default defineConfig(() => ({
   },
   server: {
     host: "127.0.0.1",
+    allowedHosts,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",
