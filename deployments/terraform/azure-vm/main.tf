@@ -69,6 +69,19 @@ variable "app_release" {
   default     = "stable"
 }
 
+variable "use_external_postgres" {
+  type        = bool
+  description = "If true, do not run the local postgres container and instead use external_database_url."
+  default     = false
+}
+
+variable "external_database_url" {
+  type        = string
+  description = "External DATABASE_URL (e.g. Azure Database for PostgreSQL). Recommended to include sslmode=require."
+  default     = ""
+  sensitive   = true
+}
+
 variable "vm_size" {
   type        = string
   description = "Azure VM size"
@@ -97,6 +110,24 @@ variable "prevent_destroy_data_disk" {
   type        = bool
   description = "If true, Terraform will refuse to destroy the data disk (safety rail to avoid accidental data loss)."
   default     = true
+}
+
+variable "backup_retention_days" {
+  type        = number
+  description = "How many days to keep local backup artifacts on the VM before deletion."
+  default     = 14
+}
+
+variable "backup_include_minio" {
+  type        = bool
+  description = "If true, also back up the MinIO data directory (uploads)."
+  default     = true
+}
+
+variable "backup_systemd_on_calendar" {
+  type        = string
+  description = "systemd OnCalendar schedule for backups (UTC unless you also set system timezone)."
+  default     = "*-*-* 03:30:00"
 }
 
 resource "azurerm_resource_group" "rg" {
@@ -216,8 +247,35 @@ resource "random_password" "minio_secret_key" {
   special = false
 }
 
+resource "random_string" "storage_suffix" {
+  length  = 6
+  upper   = false
+  lower   = true
+  numeric = true
+  special = false
+}
+
+resource "azurerm_storage_account" "backup" {
+  name                     = "${var.name_prefix}${random_string.storage_suffix.result}"
+  resource_group_name      = azurerm_resource_group.rg.name
+  location                 = azurerm_resource_group.rg.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  allow_nested_items_to_be_public = false
+
+  blob_properties {
+    versioning_enabled = true
+  }
+}
+
+resource "azurerm_storage_container" "backup" {
+  name                  = "plane-backups"
+  storage_account_id    = azurerm_storage_account.backup.id
+  container_access_type = "private"
+}
+
 locals {
-  database_url = "postgresql://plane:${random_password.postgres_password.result}@plane-db:5432/plane"
+  database_url = var.use_external_postgres ? var.external_database_url : "postgresql://plane:${random_password.postgres_password.result}@plane-db:5432/plane"
   amqp_url     = "amqp://plane:${random_password.rabbitmq_password.result}@plane-mq:5672/plane"
 
   web_url              = "https://${var.app_domain}"
@@ -371,6 +429,135 @@ locals {
                 - admin
                 - live
 
+      - path: /opt/plane/docker-compose.external-db.yml
+        permissions: "0644"
+        owner: root:root
+        content: |
+          services:
+            web:
+              image: artifacts.plane.so/makeplane/plane-frontend:${var.app_release}
+              restart: unless-stopped
+              depends_on:
+                - api
+                - worker
+
+            space:
+              image: artifacts.plane.so/makeplane/plane-space:${var.app_release}
+              restart: unless-stopped
+              depends_on:
+                - api
+                - worker
+                - web
+
+            admin:
+              image: artifacts.plane.so/makeplane/plane-admin:${var.app_release}
+              restart: unless-stopped
+              depends_on:
+                - api
+                - web
+
+            live:
+              image: artifacts.plane.so/makeplane/plane-live:${var.app_release}
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              depends_on:
+                - api
+                - web
+
+            api:
+              image: artifacts.plane.so/makeplane/plane-backend:${var.app_release}
+              command: ./bin/docker-entrypoint-api.sh
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/logs/api:/code/plane/logs
+              depends_on:
+                - plane-redis
+                - plane-mq
+                - plane-minio
+
+            worker:
+              image: artifacts.plane.so/makeplane/plane-backend:${var.app_release}
+              command: ./bin/docker-entrypoint-worker.sh
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/logs/worker:/code/plane/logs
+              depends_on:
+                - api
+                - plane-redis
+                - plane-mq
+                - plane-minio
+
+            beat-worker:
+              image: artifacts.plane.so/makeplane/plane-backend:${var.app_release}
+              command: ./bin/docker-entrypoint-beat.sh
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/logs/beat-worker:/code/plane/logs
+              depends_on:
+                - api
+                - plane-redis
+                - plane-mq
+                - plane-minio
+
+            migrator:
+              image: artifacts.plane.so/makeplane/plane-backend:${var.app_release}
+              command: ./bin/docker-entrypoint-migrator.sh
+              restart: on-failure
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/logs/migrator:/code/plane/logs
+              depends_on:
+                - plane-redis
+
+            plane-redis:
+              image: valkey/valkey:7.2.11-alpine
+              restart: unless-stopped
+              volumes:
+                - /data/plane/redis:/data
+
+            plane-mq:
+              image: rabbitmq:3.13.6-management-alpine
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/rabbitmq:/var/lib/rabbitmq
+
+            plane-minio:
+              image: minio/minio:latest
+              command: server /export --console-address ":9090"
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              volumes:
+                - /data/plane/minio:/export
+
+            proxy:
+              image: artifacts.plane.so/makeplane/plane-proxy:${var.app_release}
+              restart: unless-stopped
+              env_file:
+                - /opt/plane/.env
+              ports:
+                - "80:80"
+                - "443:443"
+              volumes:
+                - /data/plane/proxy_config:/config
+                - /data/plane/proxy_data:/data
+              depends_on:
+                - web
+                - api
+                - space
+                - admin
+                - live
+
       - path: /opt/plane/.env
         permissions: "0600"
         owner: root:root
@@ -426,6 +613,89 @@ locals {
           CERT_ACME_CA=https://acme-v02.api.letsencrypt.org/directory
           CERT_ACME_DNS=
 
+      - path: /usr/local/bin/plane-backup.sh
+        permissions: "0750"
+        owner: root:root
+        content: |
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          BACKUP_ROOT="/data/plane/backups"
+          PG_DIR="$BACKUP_ROOT/postgres"
+          MINIO_DIR="$BACKUP_ROOT/minio"
+
+          mkdir -p "$PG_DIR" "$MINIO_DIR"
+
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
+
+          PG_FILE=""
+          if [[ "${BACKUP_INCLUDE_POSTGRES}" == "1" ]]; then
+            PG_FILE="$PG_DIR/plane-postgres-${TS}.sql.gz"
+            echo "[$(date -u +%FT%TZ)] Starting Postgres backup -> $PG_FILE"
+            docker compose -f /opt/plane/docker-compose.yml --env-file /opt/plane/.env exec -T plane-db \
+              sh -lc 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip -c > "$PG_FILE"
+          fi
+
+          MINIO_FILE=""
+          if [[ "${BACKUP_INCLUDE_MINIO}" == "1" ]]; then
+            MINIO_FILE="$MINIO_DIR/plane-minio-${TS}.tar.gz"
+            echo "[$(date -u +%FT%TZ)] Starting MinIO backup -> $MINIO_FILE"
+            tar -C /data/plane -czf "$MINIO_FILE" minio
+          fi
+
+          if ! command -v azcopy >/dev/null 2>&1; then
+            echo "azcopy not installed" >&2
+            exit 1
+          fi
+
+          # Managed Identity login (idempotent)
+          azcopy login --identity >/dev/null 2>&1 || true
+
+          DEST_BASE="https://${azurerm_storage_account.backup.name}.blob.core.windows.net/${azurerm_storage_container.backup.name}"
+
+          echo "[$(date -u +%FT%TZ)] Uploading $PG_FILE"
+          if [[ -n "$PG_FILE" ]]; then
+            azcopy copy "$PG_FILE" "$DEST_BASE/postgres/" --overwrite=true
+          fi
+
+          if [[ -n "$MINIO_FILE" ]]; then
+            echo "[$(date -u +%FT%TZ)] Uploading $MINIO_FILE"
+            azcopy copy "$MINIO_FILE" "$DEST_BASE/minio/" --overwrite=true
+          fi
+
+          # Local retention
+          find "$BACKUP_ROOT" -type f -mtime +${var.backup_retention_days} -print -delete || true
+          echo "[$(date -u +%FT%TZ)] Backup completed"
+
+      - path: /etc/systemd/system/plane-backup.service
+        permissions: "0644"
+        owner: root:root
+        content: |
+          [Unit]
+          Description=Plane backup (Postgres dump + optional MinIO archive)
+          Wants=network-online.target
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          Environment=BACKUP_INCLUDE_POSTGRES=${var.use_external_postgres ? 0 : 1}
+          Environment=BACKUP_INCLUDE_MINIO=${var.backup_include_minio ? 1 : 0}
+          ExecStart=/usr/local/bin/plane-backup.sh
+
+      - path: /etc/systemd/system/plane-backup.timer
+        permissions: "0644"
+        owner: root:root
+        content: |
+          [Unit]
+          Description=Run Plane backup nightly
+
+          [Timer]
+          OnCalendar=${var.backup_systemd_on_calendar}
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
     runcmd:
       - |
         set -euo pipefail
@@ -433,6 +703,17 @@ locals {
         # Install Docker
         if ! command -v docker >/dev/null 2>&1; then
           curl -fsSL https://get.docker.com | sh
+        fi
+
+        # Install azcopy
+        if ! command -v azcopy >/dev/null 2>&1; then
+          apt-get update -y
+          apt-get install -y ca-certificates curl unzip
+          tmpdir=$(mktemp -d)
+          curl -fsSL https://aka.ms/downloadazcopy-v10-linux -o "$tmpdir/azcopy.tgz"
+          tar -xzf "$tmpdir/azcopy.tgz" -C "$tmpdir"
+          install -m 0755 "$tmpdir"/azcopy_linux_amd64_*/azcopy /usr/local/bin/azcopy
+          rm -rf "$tmpdir"
         fi
 
         # Attach/mount data disk (idempotent). The data disk attachment can race VM boot.
@@ -473,7 +754,14 @@ locals {
         chmod 700 /opt/plane
 
         # Start Plane
-        docker compose -f /opt/plane/docker-compose.yml --env-file /opt/plane/.env up -d
+        COMPOSE_FILE="/opt/plane/docker-compose.yml"
+        if [[ "${var.use_external_postgres}" == "true" ]]; then
+          COMPOSE_FILE="/opt/plane/docker-compose.external-db.yml"
+        fi
+        docker compose -f "$COMPOSE_FILE" --env-file /opt/plane/.env up -d
+
+        systemctl daemon-reload
+        systemctl enable --now plane-backup.timer
 
   CLOUDINIT
 }
@@ -484,6 +772,10 @@ resource "azurerm_linux_virtual_machine" "vm" {
   location            = azurerm_resource_group.rg.location
   size                = var.vm_size
   admin_username      = var.admin_username
+
+  identity {
+    type = "SystemAssigned"
+  }
 
   network_interface_ids = [azurerm_network_interface.nic.id]
 
@@ -508,6 +800,12 @@ resource "azurerm_linux_virtual_machine" "vm" {
   disable_password_authentication = true
 
   custom_data = base64encode(local.cloud_init)
+}
+
+resource "azurerm_role_assignment" "vm_blob_contributor" {
+  scope                = azurerm_storage_account.backup.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_linux_virtual_machine.vm.identity[0].principal_id
 }
 
 resource "azurerm_managed_disk" "data" {
