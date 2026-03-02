@@ -7,6 +7,11 @@ LOG_DIR="$ROOT_DIR/.plane-dev-logs"
 
 mkdir -p "$LOG_DIR"
 
+if ! : > "$PID_FILE"; then
+  echo "Unable to write PID file at $PID_FILE. Check permissions/ownership of $ROOT_DIR." >&2
+  exit 1
+fi
+
 required_ports=(3001 3002 3003)
 start_live=true
 if [[ "${SKIP_LIVE:-}" == "1" ]]; then
@@ -36,14 +41,13 @@ for p in "${required_ports[@]}"; do
     fi
     echo "Port $p is already in use. Refusing to start to avoid port auto-shifting." >&2
     lsof -nP -iTCP:"$p" -sTCP:LISTEN >&2 || true
+    rm -f "$PID_FILE" || true
     exit 1
   fi
 done
 
 # Start dev servers in background without attaching to TTY (prevents job control suspension)
 # Record PIDs so we can stop them safely later.
-: > "$PID_FILE"
-
 start_bg() {
   local name="$1"; shift
   local log="$LOG_DIR/$name.log"
