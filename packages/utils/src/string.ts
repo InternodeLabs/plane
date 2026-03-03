@@ -1,5 +1,33 @@
-import sanitizeHtml from "sanitize-html";
 import type { Content, JSONContent } from "@plane/types";
+
+const stripHtmlToText = (htmlString: string): string => {
+  if (!htmlString) return "";
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(htmlString, "text/html");
+    return (doc.body.textContent ?? "").trim();
+  }
+
+  return htmlString
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim();
+};
+
+const hasAllowedTagContent = (htmlString: string, allowedHTMLTags: string[] = []): boolean => {
+  if (!htmlString || allowedHTMLTags.length === 0) return false;
+
+  const normalizedTags = allowedHTMLTags.map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+
+  if (normalizedTags.length === 0) return false;
+
+  if (typeof DOMParser !== "undefined") {
+    const doc = new DOMParser().parseFromString(htmlString, "text/html");
+    return normalizedTags.some((tag) => doc.body.querySelector(tag) !== null);
+  }
+
+  return normalizedTags.some((tag) => new RegExp(`<\\s*${tag}(\\s|>|/)`, "i").test(htmlString));
+};
 
 /**
  * @description Adds space between camelCase words
@@ -10,10 +38,6 @@ import type { Content, JSONContent } from "@plane/types";
  * addSpaceIfCamelCase("thisIsATest") // returns "this Is A Test"
  */
 export const addSpaceIfCamelCase = (str: string) => {
-  if (str === undefined || str === null) return "";
-
-  if (typeof str !== "string") str = `${str}`;
-
   return str.replace(/([a-z])([A-Z])/g, "$1 $2");
 };
 
@@ -120,8 +144,7 @@ const text = stripHTML(html);
 console.log(text); // Some text
  */
 export const sanitizeHTML = (htmlString: string) => {
-  const sanitizedText = sanitizeHtml(htmlString, { allowedTags: [] }); // sanitize the string to remove all HTML tags
-  return sanitizedText.trim(); // trim the string to remove leading and trailing whitespaces
+  return stripHtmlToText(htmlString);
 };
 
 /**
@@ -147,7 +170,7 @@ export const checkEmailValidity = (email: string): boolean => {
   if (!email) return false;
 
   const isEmailValid =
-    /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
+    /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/.test(
       email
     );
 
@@ -155,10 +178,8 @@ export const checkEmailValidity = (email: string): boolean => {
 };
 
 export const isEmptyHtmlString = (htmlString: string, allowedHTMLTags: string[] = []) => {
-  // Remove HTML tags using sanitize-html
-  const cleanText = sanitizeHtml(htmlString, { allowedTags: allowedHTMLTags });
-  // Trim the string and check if it's empty
-  return cleanText.trim() === "";
+  if (stripHtmlToText(htmlString) !== "") return false;
+  return !hasAllowedTagContent(htmlString, allowedHTMLTags);
 };
 
 /**
