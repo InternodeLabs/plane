@@ -4,11 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="$ROOT_DIR/.plane-dev-pids"
 
-force=false
-if [[ "${1:-}" == "--force" ]]; then
-  force=true
-fi
-
 if [[ ! -f "$PID_FILE" ]]; then
   STATE_DIR="${PLANE_DEV_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/plane-dev}"
   ALT_PID_FILE="$STATE_DIR/pids"
@@ -20,25 +15,6 @@ fi
 
 if [[ ! -f "$PID_FILE" ]]; then
   echo "No PID file found at $PID_FILE. Nothing to stop." >&2
-  if [[ "$force" != "true" ]]; then
-    exit 0
-  fi
-
-  echo "--force specified; attempting to stop dev processes by port..." >&2
-
-  ports=(3001 3002 3003 3110 8000)
-  for p in "${ports[@]}"; do
-    if command -v lsof >/dev/null 2>&1; then
-      while IFS= read -r pid; do
-        [[ -z "$pid" ]] && continue
-        if kill -0 "$pid" >/dev/null 2>&1; then
-          echo "Stopping pid=$pid listening on port $p"
-          kill "$pid" >/dev/null 2>&1 || true
-        fi
-      done < <(lsof -t -nP -iTCP:"$p" -sTCP:LISTEN 2>/dev/null || true)
-    fi
-  done
-
   exit 0
 fi
 
