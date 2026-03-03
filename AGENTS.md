@@ -92,6 +92,62 @@ Run on the remote host:
 
 If a service isn’t listening, check its log file under `.plane-dev-logs/`.
 
+## Cloudflare + Vite Dev Pitfalls
+
+When running Vite dev servers behind Cloudflare (`pm.internode.us`), stale module caching can mix optimized dependency hashes and break React hydration/hooks.
+
+### Typical symptoms
+
+- `Invalid hook call`
+- `Cannot read properties of null (reading 'useContext' | 'useState' | 'useMemo')`
+- `Hydration failed because the initial UI does not match what was rendered on the server`
+- URLs in stack traces show mixed Vite hashes in one page load (for example two different `?v=` values).
+
+### Required Cloudflare behavior for dev
+
+- Add redirect rule for admin slash normalization:
+  - Match path: `^/god-mode$`
+  - Redirect to: `/god-mode/`
+- Cache should be bypassed for Vite/dev paths at minimum:
+  - `/god-mode/node_modules/.vite/*`
+  - `/god-mode/@vite/*`
+  - `/god-mode/@id/*`
+  - `/node_modules/.vite/*`
+  - `/@vite/*`
+  - `/@id/*`
+  - `/@fs/*`
+- For remote dev stability, bypass cache for full app paths if needed:
+  - `/god-mode/*`
+  - `/spaces/*`
+  - `/live/*`
+  - `/api/*`
+  - `/auth/*`
+
+### Dev proxy expectations (repo config)
+
+- Keep API proxy `changeOrigin: false` so backend sees real host (`pm.internode.us`), not `127.0.0.1:8000`.
+- Ensure API local settings trust forwarded HTTPS/host so generated URLs use `https`.
+- Ensure `/uploads` is proxied to MinIO (`127.0.0.1:39000`) in dev apps.
+- Vite dev responses should send `Cache-Control: no-store`.
+
+### Quick recovery when regular profile breaks but incognito works
+
+1. Close all tabs for the site.
+2. In DevTools `Application`:
+   - Clear site data.
+   - Unregister service workers (if present).
+   - Clear cookies for `pm.internode.us` and parent domain.
+3. Open an incognito window and retest URL.
+4. If still broken, restart dev:
+   - `./scripts/dev-stop.sh --force`
+   - `./scripts/dev-start.sh`
+
+### Upload/CORS gotcha
+
+- Do not expose `:8000` publicly in Cloudflare.
+- Uploads should use public origin paths (`https://pm.internode.us/uploads...`) and be routed by proxy to MinIO.
+- If browser shows `http://127.0.0.1:8000/uploads` or `http://pm.internode.us/uploads`, treat it as host/scheme forwarding misconfiguration.
+
 ## Agent roles
 
 These are suggested “agents” you can assign (human or automated). Keep the handoff format below so the next agent can continue quickly.

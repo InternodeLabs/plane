@@ -46,5 +46,15 @@ export default defineConfig(() => ({
   server: {
     host: "127.0.0.1",
     allowedHosts,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+    },
+    proxy: {
+      "/uploads": {
+        target: "http://127.0.0.1:39000",
+        changeOrigin: false,
+        secure: false,
+      },
+    },
   },
 }));

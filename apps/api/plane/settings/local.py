@@ -6,6 +6,11 @@ from .common import *  # noqa
 
 DEBUG = True
 
+# Honor reverse-proxy scheme/host in local dev (Cloudflare -> proxy -> API),
+# so generated URLs use https instead of http.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
 # Debug Toolbar settings
 INSTALLED_APPS += ("debug_toolbar",)  # noqa
 MIDDLEWARE += ("debug_toolbar.middleware.DebugToolbarMiddleware",)  # noqa
